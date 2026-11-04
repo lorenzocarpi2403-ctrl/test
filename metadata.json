@@ -1,6 +1,6 @@
 {
   "name": "ReceiptSheet",
-  "description": "Smart expense tracker that extracts receipt details using Gemini AI and syncs them automatically to Google Sheets with local analytics.",
+  "description": "Smart personal finance tracker with Gemini AI receipt scanner, multi-account balances, recurring subscriptions, income and expense analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

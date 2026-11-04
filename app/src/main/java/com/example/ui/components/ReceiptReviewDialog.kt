@@ -14,11 +14,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Store
@@ -34,17 +34,19 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -61,39 +64,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ai.ExtractedReceipt
+import com.example.data.AccountEntity
 import com.example.data.ExpenseCategory
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ReceiptReviewDialog(
     extractedReceipt: ExtractedReceipt,
     bitmap: Bitmap?,
     imageUri: String?,
+    accounts: List<AccountEntity>,
     onDismiss: () -> Unit,
     onConfirm: (
         merchant: String,
         amount: Double,
         currency: String,
         category: ExpenseCategory,
+        accountId: Long,
         date: Long,
         notes: String,
-        imageUri: String?,
-        syncToSheets: Boolean
+        imageUri: String?
     ) -> Unit
 ) {
     var merchant by remember { mutableStateOf(extractedReceipt.merchant) }
-    var amountText by remember { mutableStateOf(if (extractedReceipt.amount > 0.0) String.format(Locale.US, "%.2f", extractedReceipt.amount) else "") }
+    var amountText by remember {
+        mutableStateOf(if (extractedReceipt.amount > 0.0) String.format(Locale.US, "%.2f", extractedReceipt.amount) else "")
+    }
     var selectedCategory by remember { mutableStateOf(extractedReceipt.category) }
+    var selectedAccountId by remember { mutableStateOf(accounts.firstOrNull()?.id ?: 1L) }
     var notes by remember { mutableStateOf(extractedReceipt.itemsSummary) }
-    var syncToSheets by remember { mutableStateOf(true) }
-    val dateEpoch by remember { mutableLongStateOf(extractedReceipt.dateEpochMillis) }
+    var selectedDateEpoch by remember { mutableLongStateOf(extractedReceipt.dateEpochMillis) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
-    val formattedDate = remember(dateEpoch) {
+    val formattedDate = remember(selectedDateEpoch) {
         val sdf = SimpleDateFormat("dd MMMM yyyy", Locale.ITALIAN)
-        sdf.format(Date(dateEpoch))
+        sdf.format(Date(selectedDateEpoch))
     }
 
     Dialog(
@@ -103,7 +111,9 @@ fun ReceiptReviewDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .padding(vertical = 24.dp)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(vertical = 12.dp)
                 .clip(RoundedCornerShape(24.dp)),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -116,41 +126,37 @@ fun ReceiptReviewDialog(
                 // Header with AI badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Dati Estratti dall'IA",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Text(
-                            text = "Verifica e correggi i dati prima del salvataggio",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Scontrino Rilevato dall'IA",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Verifica i dati estratti e scegli il conto da cui scalare l'importo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Thumbnail preview if available
                 if (bitmap != null) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 140.dp),
+                            .heightIn(max = 120.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
@@ -160,17 +166,17 @@ fun ReceiptReviewDialog(
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(140.dp)
+                                .height(120.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
 
                 // Merchant Input
                 OutlinedTextField(
                     value = merchant,
                     onValueChange = { merchant = it },
-                    label = { Text("Nome Esercente / Negozio") },
+                    label = { Text("Nome Esercente") },
                     leadingIcon = {
                         Icon(Icons.Default.Store, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     },
@@ -181,63 +187,170 @@ fun ReceiptReviewDialog(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Amount and Date Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Amount
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Importo Totale (€)") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Euro, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("amount_input"),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Date Field with Detection Badge
+                Text(
+                    text = "Data Transazione",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showDatePicker = true },
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        label = { Text("Importo Totale (€)") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Euro, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("amount_input"),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = if (extractedReceipt.isDateDetectedFromReceipt) Color(0xFF059669) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = formattedDate,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (extractedReceipt.isDateDetectedFromReceipt)
+                                        "✓ Data rilevata dallo scontrino (tocca per modificare)"
+                                    else
+                                        "Data predefinita su oggi (tocca per modificare)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (extractedReceipt.isDateDetectedFromReceipt) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
-                    OutlinedTextField(
-                        value = formattedDate,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Data") },
-                        leadingIcon = {
-                            Icon(Icons.Default.CalendarToday, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
+                        Text(
+                            text = "Modifica",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                if (showDatePicker) {
+                    val datePickerState = rememberDatePickerState(
+                        initialSelectedDateMillis = selectedDateEpoch
+                    )
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                datePickerState.selectedDateMillis?.let {
+                                    selectedDateEpoch = it
+                                }
+                                showDatePicker = false
+                            }) {
+                                Text("Conferma")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker = false }) {
+                                Text("Annulla")
+                            }
+                        }
+                    ) {
+                        DatePicker(state = datePickerState)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Account Selection
+                if (accounts.isNotEmpty()) {
+                    Text(
+                        text = "Scala dal Conto",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accounts.forEach { acc ->
+                            val isSelected = acc.id == selectedAccountId
+                            val bg = if (isSelected) Color(acc.colorHex) else MaterialTheme.colorScheme.surfaceVariant
+                            val textColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(bg)
+                                    .clickable { selectedAccountId = acc.id }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "${acc.name} (€${String.format("%.2f", acc.balance)})",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = textColor,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
                 // Category Selection
                 Text(
-                    text = "Categoria Scontrino",
+                    text = "Categoria Spesa",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ExpenseCategory.entries.forEach { cat ->
+                    ExpenseCategory.expenseCategories().forEach { cat ->
                         val isSelected = cat == selectedCategory
                         val chipBg = if (isSelected) cat.color else MaterialTheme.colorScheme.surfaceVariant
-                        val contentColor = if (isSelected) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -245,26 +358,16 @@ fun ReceiptReviewDialog(
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(chipBg)
                                 .clickable { selectedCategory = cat }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(
-                                imageVector = cat.icon,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = cat.labelItalian,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = contentColor,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
+                            Icon(cat.icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(cat.labelItalian, style = MaterialTheme.typography.labelSmall, color = contentColor)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Notes / Extracted Items
                 OutlinedTextField(
@@ -276,52 +379,10 @@ fun ReceiptReviewDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    maxLines = 3
+                    maxLines = 2
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Sync to Sheets toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                        .clickable { syncToSheets = !syncToSheets }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = syncToSheets,
-                        onCheckedChange = { syncToSheets = it },
-                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.CloudUpload,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Sincronizza su Google Sheets",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                        Text(
-                            text = "Aggiunge immediatamente la riga al foglio di calcolo",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Action Buttons
                 Row(
@@ -344,23 +405,26 @@ fun ReceiptReviewDialog(
                                 parsedAmount,
                                 "€",
                                 selectedCategory,
-                                dateEpoch,
+                                selectedAccountId,
+                                selectedDateEpoch,
                                 notes,
-                                imageUri,
-                                syncToSheets
+                                imageUri
                             )
                         },
                         modifier = Modifier
-                            .weight(1.5f)
+                            .weight(1.4f)
                             .testTag("confirm_save_button"),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (syncToSheets) "Salva & Invia" else "Salva Spesa")
+                        Text("Salva Spesa")
                     }
                 }
+
+                // Spazio extra per permettere di scorrere oltre i tasti di navigazione di sistema del telefono
+                Spacer(modifier = Modifier.height(72.dp))
             }
         }
     }

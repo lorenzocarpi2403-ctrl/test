@@ -7,8 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,34 +27,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.ExpenseCategory
-import com.example.data.ExpenseEntity
+import com.example.data.TransactionEntity
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CategorySpendingChart(
-    expenses: List<ExpenseEntity>,
+    transactions: List<TransactionEntity>,
+    typeFilter: String = "EXPENSE",
+    title: String = "Ripartizione per Categoria",
     modifier: Modifier = Modifier
 ) {
-    if (expenses.isEmpty()) return
+    val items = transactions.filter { it.type == typeFilter }
+    if (items.isEmpty()) return
 
-    val totalSpent = expenses.sumOf { it.amount }
+    val totalSpent = items.sumOf { it.amount }
     if (totalSpent <= 0.0) return
 
-    val categoryTotals = expenses
+    val categoryTotals = items
         .groupBy { ExpenseCategory.fromString(it.category) }
         .mapValues { entry -> entry.value.sumOf { it.amount } }
         .toList()
         .sortedByDescending { it.second }
 
     val animationProgress = remember { Animatable(0f) }
-    LaunchedEffect(expenses) {
+    LaunchedEffect(items) {
         animationProgress.snapTo(0f)
         animationProgress.animateTo(1f, animationSpec = tween(700))
     }
@@ -73,7 +71,7 @@ fun CategorySpendingChart(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Ripartizione per Categoria",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -122,7 +120,7 @@ fun CategorySpendingChart(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "settori",
+                            text = "categorie",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -151,7 +149,7 @@ fun CategorySpendingChart(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = category.labelItalian.take(14),
+                                    text = category.labelItalian.take(13),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1

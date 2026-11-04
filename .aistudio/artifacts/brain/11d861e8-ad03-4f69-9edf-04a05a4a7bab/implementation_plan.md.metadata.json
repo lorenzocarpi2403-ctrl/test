@@ -1,6 +1,6 @@
 {
-  "summary":  "Piano di implementazione per ReceiptSheet: applicazione Android in Jetpack Compose che estrae automaticamente i dati da foto di scontrini con Gemini AI multimodale, permette la revisione con anteprima e sincronizza direttamente le spese su Google Sheets, offrendo anche un registro spese locale con grafici e statistiche mensili.",
-  "updatedAt":  "2026-11-02T10:19:19.527167075Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Piano di implementazione per la trasformazione di ReceiptSheet in un'applicazione completa di finanza personale: aggiunta di gestione entrate, monitoraggio abbonamenti ricorrenti (Netflix, Spotify, ecc.), conti multipli con saldi aggiornati in tempo reale, schermata dedicata a grafici e statistiche avanzate (andamento mensile, entrate vs uscite, ripartizione categorie), barra di navigazione a 4 sezioni e rimozione completa di Google Sheets.",
+  "updatedAt": "2026-11-03T20:36:58.618472013Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

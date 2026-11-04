@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.ReceiptViewModel
 import com.example.ui.screens.DashboardScreen
@@ -25,7 +27,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            ReceiptSheetTheme {
+            val themeConfig by receiptViewModel.themeConfig.collectAsState()
+            ReceiptSheetTheme(
+                appColorTheme = themeConfig.colorTheme,
+                backgroundTheme = themeConfig.backgroundTheme,
+                themeMode = themeConfig.themeMode
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     DashboardScreen(viewModel = receiptViewModel)
                 }

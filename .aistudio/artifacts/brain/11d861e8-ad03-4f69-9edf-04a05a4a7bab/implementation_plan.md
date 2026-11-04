@@ -1,127 +1,129 @@
-# ReceiptSheet — Smart Expense Tracker con AI & Google Sheets
+# Piano di Evoluzione — Personal Finance & Smart Expense Tracker
 
-Applicazione Android nativa creata con Jetpack Compose e Kotlin che permette di fotografare scontrini, estrarre istantaneamente i dati chiave (esercente, totale, valuta, data, categoria e dettagli) tramite Gemini AI multimodale, verificare i valori in un'anteprima interattiva e sincronizzare automaticamente le voci su un foglio Google Sheets, mantenendo un registro spese locale con statistiche mensili e grafici visivi.
+Evoluzione dell'applicazione in una suite completa di gestione delle finanze personali: rimozione completa dell'integrazione Google Sheets in favore di un'architettura nativa al 100% che gestisce **Entrate**, **Spese con scansione scontrini AI**, **Abbonamenti ricorrenti** (Netflix, Disney+, Spotify, ecc.), **Conti multipli con saldi automatici** (Banca, Carte, Contanti, Risparmi) e una pagina dedicata con **Grafici e Statistiche Avanzate**.
 
 ---
 
 ## Decisioni Confermate e Revisione Utente
 
 > [!IMPORTANT]
-> Le seguenti scelte sono state confermate tramite la sessione di chiarimento iniziale e guidano l'architettura del progetto:
+> Le seguenti scelte sono state confermate dall'utente e guidano l'architettura:
 
-- **Sincronizzazione Google Sheets**: Collegamento diretto tramite autenticazione Google / OAuth e Google Sheets API per creare o aggiornare automaticamente il foglio di calcolo con righe formattate (`Data`, `Esercente`, `Categoria`, `Importo`, `Note`).
-- **Verifica e Revisione Scontrino**: Flusso a 2 fasi con cattura/selezione foto -> estrazione automatica tramite Gemini AI -> schermata di anteprima interattiva con campi modificabili (esercente, importo, categoria, data) prima dell'invio.
-- **Registro Spese Locale & Analisi**: Database locale Room per conservare la cronologia completa delle spese anche offline, con grafici di riepilogo mensile, filtro per periodo e suddivisione percentuale per categoria.
-- **Supporto Fotocamera e Galleria**: Possibilità di scattare una foto al momento o selezionare un'immagine già salvata tramite Android Photo Picker nativo.
+- **Rimozione Google Sheets**: Eliminazione del modulo Google Sheets, dei webhook, dei pulsanti di sincronizzazione e degli scope OAuth, semplificando l'esperienza utente e rendendo l'app 100% autonoma, veloce e privata.
+- **Gestione Conti Multipli**: Tracciamento di molteplici conti e portafogli (es. *Conto Corrente*, *Revolut / Carta*, *Contanti*, *Fondo Risparmio*) con saldo iniziale configurabile e aggiornamento istantaneo del saldo per ogni entrata o uscita registrata.
+- **Abbonamenti Ricorrenti**: Sezione dedicata per monitorare servizi come Netflix, Spotify, Disney+, iCloud, palestra, ecc. con calcolo automatico dell'impatto mensile complessivo, data del prossimo rinnovo e frequenza (mensile / annuale).
+- **Entrate (Income Tracking)**: Modulo per registrare stipendi, bonus, bonifici, vendite e regali con categoria, conto di accredito e data.
+- **Nuova Pagina Grafici & Analisi**: Schermata analitica dedicata con:
+  - Confronto visivo Entrate vs Uscite e Risparmio Netto del mese corrente.
+  - Grafico a ciambella interattivo delle categorie di spesa e categorie di entrata.
+  - Panoramica dell'andamento finanziario complessivo e patrimonio netto totale.
+- **Navigazione a Barra Inferiore**: 4 sezioni principali chiare e accessibili:
+  1. **Transazioni** (Spese con scanner AI ed Entrate)
+  2. **Conti** (Panoramica saldi, patrimonio netto e gestione conti)
+  3. **Abbonamenti** (Servizi attivi, costo mensile e prossime scadenze)
+  4. **Statistiche** (Grafici generali e analisi dettagliata del mese)
 
 ---
 
-## 1. Panoramica & Concetto Chiave
+## 1. Panoramica delle Funzionalità
 
-### Cosa Fa l'Applicazione
-L'app risolve il problema della registrazione manuale delle spese quotidiane. L'utente scatta una foto a uno scontrino (o ne seleziona uno dalla galleria): l'intelligenza artificiale estrae con precisione l'importo totale, il nome dell'attività, la data di emissione e assegna una categoria intelligente (es. *Alimentari*, *Ristorazione*, *Carburante*, *Utenze*, *Salute*, *Altro*). Dopo una rapida conferma visiva da parte dell'utente, la spesa viene salvata localmente e inviata all'istante a Google Sheets.
+### 1.1 Entrate e Spese (Transazioni)
+- Possibilità di registrare sia **Uscite** (tramite scansione scontrino Gemini AI o inserimento manuale rapido) sia **Entrate** (stipendio, investimenti, vendite, freelance).
+- Ogni transazione specifica: importo, data, categoria, conto di riferimento e note.
+- Filtri veloci per tipo (Tutte, Solo Uscite, Solo Entrate) e per categoria.
 
-### Destinatari
-- Liberi professionisti e lavoratori autonomi che devono rendicontare spese e scontrini.
-- Famiglie e individui che gestiscono un budget mensile su Google Sheets e desiderano eliminare l'inserimento manuale.
-- Chiunque voglia avere una visione chiara e ordinata delle proprie uscite senza perdere tempo a digitare scontrini stropicciati.
+### 1.2 Monitoraggio Abbonamenti (Subscriptions)
+- Schede personalizzate per servizi popolari con loghi/colori dedicati (Netflix, Spotify, Prime, Disney+, YouTube, Gym, iCloud, ecc.) o inserimento personalizzato.
+- Calcolo automatico della spesa ricorrente mensile e annuale.
+- Visualizzazione chiara dei giorni rimanenti al prossimo rinnovo con badge di stato.
 
-### Valore Principale
-- **Zero noia da digitazione**: Da scontrino cartaceo a riga formattata su Google Sheets in meno di 5 secondi.
-- **Accuratezza e controllo**: L'utente ha sempre l'ultima parola sui dati estratti prima della sincronizzazione.
-- **Tracciamento integrato**: Statistiche mensili e andamento delle spese visibili direttamente nell'app anche senza aprire Google Sheets.
+### 1.3 Conti e Saldi (Accounts)
+- Supporto per più conti con icone e colori distintivi (Banca principale, Carte prepagate, Risparmi, Portafoglio contanti).
+- Saldo totale (Patrimonio Netto) calcolato in tempo reale sommando i saldi dei singoli conti.
+- Quando si aggiunge un'uscita, il saldo del conto selezionato diminuisce; quando si aggiunge un'entrata, il saldo aumenta. Possibilità di effettuare giroconti/trasferimenti tra conti.
+
+### 1.4 Schermata Statistiche & Analisi Finanziaria
+- **Metriche del Mese**: Entrate Totali, Uscite Totali, Flusso di Cassa Netto (Risparmio) e % di risparmio rispetto alle entrate.
+- **Grafico a Barre Comparativo Entrate vs Spese**: visualizzazione immediata dell'equilibrio finanziario del mese.
+- **Grafico di Ripartizione Spese per Categoria**: visualizzazione a ciambella Canvas con percentuali per individuare dove si spende di più.
+- **Riepilogo Abbonamenti**: incidenza fissa mensile sul budget totale.
 
 ---
 
 ## 2. Esperienza Utente & Design Visivo
 
-### Flussi Utente Principali
-1. **Dashboard & Registro Spese**:
-   - Card in evidenza con il totale spese del mese corrente e confronto visivo rispetto alle settimane precedenti.
-   - Grafico a barre/torta interattivo con la distribuzione delle categorie.
-   - Lista delle transazioni recenti con badge di stato sincronizzazione Google Sheets (Sincronizzato / In sospeso).
-   - Floating Action Button (FAB) prominente "Scansiona Scontrino" e pulsante secondario "Aggiungi Manualmente".
-2. **Cattura e Scansione Scontrino**:
-   - Scelta tra scatto rapido da fotocamera o selezione da galleria (Photo Picker).
-   - Animazione di scansione laser/radar con indicatore di caricamento ("Analisi AI in corso...").
-3. **Schermata di Revisione & Conferma**:
-   - Anteprima dell'immagine dello scontrino con zoom/pinch.
-   - Campi precompilati dall'IA: Nome Esercente, Data, Importo Totale, Valuta, Categoria suggerita, Note opzionali.
-   - Selettore a chip per cambiare rapidamente categoria con un tocco.
-   - Pulsante primario "Salva & Sincronizza su Google Sheets" e pulsante "Salva solo in locale".
-4. **Configurazione Google Sheets**:
-   - Sezione Impostazioni per collegare l'account Google con un tocco.
-   - Selezione del foglio di destinazione (creazione automatica di un nuovo foglio "Spese Personali" o inserimento dell'ID foglio esistente).
-
-### Identità Visiva & Tema
-- **Stile Estetico**: Modern Financial Editorial — pulito, affidabile, moderno con contrasti netti e finiture Material 3 di alto livello.
-- **Tavolozza Colori**:
-  - *Sfondo Principale*: Dark surface (`#12161A`) e Slate Light (`#F8FAFC`) con palette dinamica M3.
-  - *Colore Primario*: Emerald Green profondo (`#00875A` / `#22C55E`) che evoca prosperità finanziaria, precisione e successo di sincronizzazione.
-  - *Accento Secondario*: Vivid Teal (`#0D9488`) e Warm Amber (`#F59E0B`) per badge di categoria e avvisi di verifica.
-  - *Superfici*: Card con elevazione tonale morbida e bordi arrotondati (16.dp).
-- **Tipografia**:
-  - Display & Titoli: Caratteri geometrici moderni, gerarchia chiara e numeri in evidenza per gli importi monetari.
-  - Testo Corpo: Inter/Roboto scalabile, con etichette chiare e touch target minimi di 48dp.
-- **Micro-interazioni & Feedback**:
-  - Transizioni animate con `AnimatedVisibility` durante l'estrazione dati.
-  - Haptic feedback leggero alla cattura e alla sincronizzazione completata.
-  - Badge di sincronizzazione Google Sheets con animazione di spunta verde.
+### Identità Visiva M3
+- **Stile**: Modern Financial Dashboard — raffinato, scuro o chiaro, con palette dinamica e accenti cromatici netti:
+  - *Verde Smeraldo (`#10B981`)* per entrate e flussi positivi.
+  - *Rosso Corallo / Ambra (`#EF4444` / `#F59E0B`)* per uscite e spese elevate.
+  - *Indaco / Viola (`#6366F1`)* per abbonamenti e servizi ricorrenti.
+  - *Blu Elettrico (`#3B82F6`)* per conti bancari e patrimonio netto.
+- **NavigationBar Material 3**:
+  - `Transazioni` (Icona lista / scontrino)
+  - `Conti` (Icona portafoglio / banca)
+  - `Abbonamenti` (Icona abbonamenti / streaming)
+  - `Statistiche` (Icona grafici / analytics)
 
 ---
 
-## 3. Decisioni di Prodotto & Trade-Off
+## 3. Decisioni Tecniche e Pulizia del Codice
 
-| Decisione | Approccio Scelto | Motivazione & Vantaggi | Alternative Scartate |
-| :--- | :--- | :--- | :--- |
-| **Modello di Visione AI** | Gemini 3.8 Flash multimodale tramite Firebase AI Logic | Tempi di risposta rapidissimi (1-2s), eccellente comprensione di scontrini stropicciati e supporto di output JSON strutturato nativo (`responseSchema`). | OCR on-device ML Kit (troppo rigido per scontrini non standard e prive di comprensione semantica della categoria). |
-| **Flusso di Sincronizzazione Sheets** | Google Sheets API con OAuth nativo (`set_up_oauth`) | Massima sicurezza, autorizzazioni ufficiali Google, nessuna configurazione di webhook complessi per l'utente comune. | Webhook serverless manuale (troppo ostico per l'utente finale che dovrebbe configurare script di terze parti). |
-| **Persistenza Locale** | Room Database (SQLite) | Letture istantanee, funzionamento offline al 100%, query efficienti per aggregazioni mensili e raggruppamento categorie. | Solo cloud / memoria temporanea (perdita dati in assenza di connessione). |
-| **Acquisizione Immagini** | Android Photo Picker + Camera Intent | Zero permessi invasivi di archiviazione per la galleria, esperienza utente conforme alle policy Google Play più recenti. | Permessi `READ_EXTERNAL_STORAGE` deprecati. |
+| Aspetto | Azione Intrapresa | Motivazione |
+| :--- | :--- | :--- |
+| **Google Sheets** | Rimozione completa di `GoogleSheetsSyncService`, impostazioni Sheets, opzioni di sincronizzazione e revoca scope OAuth via `remove_oauth`. | L'utente non desidera più Google Sheets; l'app diventa 100% nativa e autonoma. |
+| **Database Room** | Espansione dello schema Room con tabelle: `accounts`, `transactions` (con tipo IN / OUT), `subscriptions`. | Persistenza locale ultra-rapida, query reattive con `Flow` e integrità referenziale. |
+| **Gemini AI** | Conservazione dello scanner scontrini per l'estrazione veloce delle uscite, indirizzando la spesa direttamente sul conto scelto. | Preserva il valore centrale della scansione intelligente senza digitazione manuale. |
+| **Grafici Canvas** | Implementazione con Compose Canvas puro (zero dipendenze esterne pesanti), massima fluidità e supporto dark/light mode nativo. | Alte performance e interattività fluida. |
 
 ---
 
-## 4. Architettura Tecnica & Flusso Dati
-
-### Schema del Sistema
+## 4. Architettura Tecnica & Schema Dati
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                       Interfaccia Utente                    │
-│   Dashboard (Grafici)  │  Scansione/Fotocamera  │  Revisione│
-└──────────────┬───────────────────┬───────────────────┬──────┘
-               │                   │                   │
-               ▼                   ▼                   ▼
+│                 Material 3 NavigationBar                     │
+│  [Transazioni]   │   [Conti]   │  [Abbonamenti] │ [Statistiche]│
+└─────────┬───────────────┬──────────────┬───────────────┬────┘
+          │               │              │               │
+          ▼               ▼              ▼               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    ReceiptExpenseViewModel                  │
-│  - Gestione stato UI (Idle, Scanning, Review, Syncing)      │
-│  - Calcolo statistiche mensili e aggregazione categorie     │
-└──────────────┬───────────────────┬───────────────────┬──────┘
-               │                   │                   │
-      ┌────────▼────────┐ ┌────────▼────────┐ ┌────────▼────────┐
-      │   Gemini AI     │ │   Room Database │ │  Google Sheets  │
-      │  Vision Service │ │   Repository    │ │   Sync Service  │
-      │ (Estrazione     │ │ (Spese locali,  │ │ (OAuth Google   │
-      │  dati JSON)     │ │  cache offline) │ │  Workspace API) │
-      └─────────────────┘ └─────────────────┘ └─────────────────┘
+│                    FinanceViewModel                         │
+│  - Stato Patrimoniale: Saldo Totale, Conti & Saldi          │
+│  - Transazioni: Entrate & Uscite (con Scanner AI)           │
+│  - Abbonamenti: Spesa mensile ricorrente & Scadenze         │
+│  - Statistiche Mensili: Totali, Risparmio, Breakdown Canvas │
+└─────────┬──────────────────────────────┬────────────────────┘
+          │                              │
+          ▼                              ▼
+┌──────────────────┐           ┌──────────────────┐
+│  Gemini 3.5 AI   │           │  AppDatabase     │
+│  (Scan Scontrini)│           │  (Room SQLite)   │
+└──────────────────┘           └──────────────────┘
 ```
 
-### Modello Dati Principale (`ExpenseItem`)
-- `id`: Long (Chiave primaria autoincrementale)
-- `merchant`: String (es. "Esselunga", "Eni Station", "Ristorante Bella Italia")
-- `amount`: Double (Importo totale dello scontrino)
-- `currency`: String (Default "EUR" / "€")
-- `category`: ExpenseCategory (Enum: GROCERIES, RESTAURANTS, TRANSPORT, UTILITIES, SHOPPING, HEALTH, ENTERTAINMENT, OTHER)
-- `date`: Long (Timestamp della spesa estratta dallo scontrino)
-- `notes`: String? (Dettagli aggiuntivi o voci rilevate)
-- `imageUri`: String? (URI locale della foto scansionata)
-- `isSyncedToSheets`: Boolean (Flag di sincronizzazione)
-- `sheetsRowId`: String? (Riferimento riga o ID aggiornamento)
-
-### Sequenza di Elaborazione
-1. **Cattura**: L'utente scatta la foto dello scontrino o ne sceglie una dalla galleria.
-2. **Analisi Multimodale**: L'immagine viene ridimensionata ottimamente e inviata a `gemini-3.8-flash` con un prompt strutturato e `responseSchema` JSON che definisce esercente, totale, data, valuta e categoria.
-3. **Revisione Utente**: L'app apre il foglio di revisione. L'utente può modificare o approvare i dati estratti con un tocco.
-4. **Salvataggio Locale**: L'oggetto `ExpenseItem` viene memorizzato in Room.
-5. **Esportazione su Google Sheets**: Se l'utente ha collegato il proprio account Google, viene eseguita la chiamata `appendRow` alle API di Google Sheets nel foglio selezionato (aggiungendo automaticamente intestazioni se è un nuovo foglio).
-6. **Aggiornamento Dashboard**: I grafici di spesa e il budget mensile si aggiornano istantaneamente in tempo reale.
+### Entità del Database Room
+1. `AccountEntity`:
+   - `id`: Long (PK)
+   - `name`: String (es. "Conto Principale", "Carta Revolut", "Contanti")
+   - `balance`: Double (saldo corrente)
+   - `colorHex`: Long
+   - `iconName`: String
+2. `TransactionEntity`:
+   - `id`: Long (PK)
+   - `type`: String ("EXPENSE" o "INCOME")
+   - `merchantOrTitle`: String
+   - `amount`: Double
+   - `category`: String
+   - `date`: Long (timestamp)
+   - `accountId`: Long (FK verso account)
+   - `notes`: String
+   - `imageUri`: String?
+3. `SubscriptionEntity`:
+   - `id`: Long (PK)
+   - `name`: String (es. "Netflix", "Spotify", "Disney+", "Palestra")
+   - `cost`: Double
+   - `billingCycle`: String ("MONTHLY", "ANNUAL")
+   - `nextRenewalDate`: Long
+   - `category`: String
+   - `colorHex`: Long
+   - `isActive`: Boolean

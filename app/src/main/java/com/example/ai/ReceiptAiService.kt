@@ -25,6 +25,7 @@ data class ExtractedReceipt(
     val amount: Double,
     val currency: String,
     val dateEpochMillis: Long,
+    val isDateDetectedFromReceipt: Boolean = false,
     val category: ExpenseCategory,
     val itemsSummary: String,
     val rawJson: String
@@ -38,7 +39,7 @@ class ReceiptAiService {
             "merchantName" to Schema.string("Nome del negozio, supermercato o esercente sullo scontrino"),
             "totalAmount" to Schema.double("Importo totale da pagare o pagato riportato sullo scontrino"),
             "currency" to Schema.string("Simbolo o sigla valuta (es. EUR, €, USD, $)"),
-            "receiptDate" to Schema.string("Data dello scontrino in formato ISO YYYY-MM-DD se leggibile, altrimenti stringa vuota"),
+            "receiptDate" to Schema.string("Data dello scontrino in formato YYYY-MM-DD (es. converti 02/11/2026 in 2026-11-02) se leggibile, altrimenti stringa vuota"),
             "category" to Schema.string("Categoria spesa: GROCERIES, RESTAURANT, TRANSPORT, UTILITIES, SHOPPING, HEALTH, ENTERTAINMENT, OTHER"),
             "itemsSummary" to Schema.string("Breve elenco o descrizione degli articoli principali acquistati")
         ),
@@ -73,11 +74,11 @@ class ReceiptAiService {
         val prompt = """
             Estrai i dati chiave da questo scontrino fiscale o ricevuta:
             - merchantName: nome attività commerciale o negozio
-            - totalAmount: importo totale complessivo pagato (numero)
+            - totalAmount: importo totale complessivo pagato (numero decimale)
             - currency: valuta (EUR o €)
-            - receiptDate: data in formato YYYY-MM-DD se presente
+            - receiptDate: cerca accuratamente la data dello scontrino o documento commerciale (ad es. 02/11/2026, 02-11-2026, 2026-11-02) e digitalizzala in formato YYYY-MM-DD. Se non è presente o non leggibile, lascia stringa vuota.
             - category: GROCERIES, RESTAURANT, TRANSPORT, UTILITIES, SHOPPING, HEALTH, ENTERTAINMENT, OTHER
-            - itemsSummary: breve riepilogo articoli
+            - itemsSummary: breve riepilogo articoli principali
         """.trimIndent()
 
         // 1. Try high-speed gemini-3.5-flash-lite first (30s timeout)
@@ -139,7 +140,7 @@ class ReceiptAiService {
             val categoryStr = json.optString("category")
             val itemsSummary = json.optString("itemsSummary")
 
-            val parsedDate = parseIsoDateOrCurrent(dateStr)
+            val (parsedDate, isDateFound) = parseIsoDateOrCurrent(dateStr)
             val category = ExpenseCategory.fromString(categoryStr)
 
             Result.success(
@@ -148,6 +149,7 @@ class ReceiptAiService {
                     amount = amount,
                     currency = if (currency.contains("EUR", ignoreCase = true) || currency == "€") "€" else currency,
                     dateEpochMillis = parsedDate,
+                    isDateDetectedFromReceipt = isDateFound,
                     category = category,
                     itemsSummary = itemsSummary,
                     rawJson = jsonString
@@ -178,13 +180,32 @@ class ReceiptAiService {
         return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
     }
 
-    private fun parseIsoDateOrCurrent(dateStr: String?): Long {
-        if (dateStr.isNullOrBlank()) return System.currentTimeMillis()
-        return try {
-            val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            format.parse(dateStr)?.time ?: System.currentTimeMillis()
-        } catch (_: Exception) {
-            System.currentTimeMillis()
+    internal fun parseIsoDateOrCurrent(dateStr: String?): Pair<Long, Boolean> {
+        if (dateStr.isNullOrBlank()) return Pair(System.currentTimeMillis(), false)
+        val trimmed = dateStr.trim()
+        val patterns = listOf(
+            "yyyy-MM-dd",
+            "dd/MM/yyyy",
+            "dd-MM-yyyy",
+            "dd.MM.yyyy",
+            "d/M/yyyy",
+            "d-M-yyyy",
+            "dd/MM/yy",
+            "dd-MM-yy",
+            "yyyy/MM/dd",
+            "yyyy.MM.dd"
+        )
+        for (pattern in patterns) {
+            try {
+                val format = SimpleDateFormat(pattern, Locale.ITALIAN).apply {
+                    isLenient = false
+                }
+                val date = format.parse(trimmed)
+                if (date != null) {
+                    return Pair(date.time, true)
+                }
+            } catch (_: Exception) {}
         }
+        return Pair(System.currentTimeMillis(), false)
     }
 }

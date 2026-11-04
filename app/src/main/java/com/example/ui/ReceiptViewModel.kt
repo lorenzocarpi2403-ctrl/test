@@ -1,7 +1,6 @@
 package com.example.ui
 
 import android.app.Application
-import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
@@ -9,11 +8,22 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.ExtractedReceipt
 import com.example.ai.ReceiptAiService
+import com.example.data.AccountEntity
 import com.example.data.AppDatabase
+import com.example.data.AppThemeConfig
+import com.example.data.BudgetEntity
+import com.example.data.BudgetProgress
 import com.example.data.ExpenseCategory
-import com.example.data.ExpenseEntity
-import com.example.data.ExpenseRepository
-import com.example.sync.GoogleSheetsSyncService
+import com.example.data.FinanceRepository
+import com.example.data.MonthlyBudgetHelper
+import com.example.data.RecurringTransactionEntity
+import com.example.data.SubscriptionEntity
+import com.example.data.ThemePreferences
+import com.example.data.TransactionEntity
+import com.example.data.TransactionType
+import com.example.ui.theme.AppBackgroundTheme
+import com.example.ui.theme.AppColorTheme
+import com.example.ui.theme.ThemeMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,7 +33,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private const val TAG = "ReceiptViewModel"
+private const val TAG = "FinanceViewModel"
 
 sealed interface ScanUiState {
     data object Idle : ScanUiState
@@ -40,42 +50,83 @@ sealed interface ScanUiState {
     ) : ScanUiState
 }
 
+enum class TransactionFilter(val label: String) {
+    ALL("Tutte"),
+    EXPENSE("Spese"),
+    INCOME("Entrate")
+}
+
 class ReceiptViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application)
-    private val repository = ExpenseRepository(db.expenseDao())
+    private val repository = FinanceRepository(
+        db.accountDao(),
+        db.transactionDao(),
+        db.subscriptionDao(),
+        db.recurringTransactionDao(),
+        db.budgetDao()
+    )
     private val aiService = ReceiptAiService()
-    val sheetsSyncService = GoogleSheetsSyncService(application)
+    private val themePreferences = ThemePreferences(application)
 
+    // Theme & Personalizzazione
+    val themeConfig: StateFlow<AppThemeConfig> = themePreferences.themeConfig
+
+    // Scan State
     private val _scanState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val scanState: StateFlow<ScanUiState> = _scanState.asStateFlow()
 
     private val _userFeedback = MutableStateFlow<String?>(null)
     val userFeedback: StateFlow<String?> = _userFeedback.asStateFlow()
 
-    private val _isSyncing = MutableStateFlow(false)
-    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
-
+    // Filters
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _typeFilter = MutableStateFlow(TransactionFilter.ALL)
+    val typeFilter: StateFlow<TransactionFilter> = _typeFilter.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow<ExpenseCategory?>(null)
     val selectedCategory: StateFlow<ExpenseCategory?> = _selectedCategory.asStateFlow()
 
-    val allExpenses = repository.allExpenses.stateIn(
+    // Accounts
+    val allAccounts = repository.allAccounts.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
 
-    val filteredExpenses = combine(allExpenses, _searchQuery, _selectedCategory) { list, query, cat ->
-        list.filter { item ->
+    val totalNetWorth = repository.totalNetWorth.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0.0
+    )
+
+    // Transactions
+    val allTransactions = repository.allTransactions.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val filteredTransactions = combine(
+        allTransactions,
+        _searchQuery,
+        _typeFilter,
+        _selectedCategory
+    ) { transactions, query, type, cat ->
+        transactions.filter { item ->
+            val matchesType = when (type) {
+                TransactionFilter.ALL -> true
+                TransactionFilter.EXPENSE -> item.type == "EXPENSE"
+                TransactionFilter.INCOME -> item.type == "INCOME"
+            }
             val matchesQuery = query.isBlank() ||
-                item.merchant.contains(query, ignoreCase = true) ||
+                item.title.contains(query, ignoreCase = true) ||
                 item.notes.contains(query, ignoreCase = true) ||
                 item.amount.toString().contains(query)
             val matchesCategory = cat == null || item.category == cat.name
-            matchesQuery && matchesCategory
+            matchesType && matchesQuery && matchesCategory
         }
     }.stateIn(
         scope = viewModelScope,
@@ -83,8 +134,44 @@ class ReceiptViewModel(application: Application) : AndroidViewModel(application)
         initialValue = emptyList()
     )
 
+    // Subscriptions
+    val allSubscriptions = repository.allSubscriptions.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    // Fixed & Recurring Transactions (Entrate e Uscite Fisse)
+    val allRecurring = repository.allRecurring.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    // Monthly Spending Limit (Budget Mensile)
+    val monthlyBudget = repository.monthlyBudget.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
+
+    val budgetProgress = combine(
+        monthlyBudget,
+        allTransactions
+    ) { budget, transactions ->
+        MonthlyBudgetHelper.calculateProgress(budget?.monthlyLimit, transactions)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
+
     fun onSearchQueryChanged(newQuery: String) {
         _searchQuery.value = newQuery
+    }
+
+    fun onTypeFilterChanged(filter: TransactionFilter) {
+        _typeFilter.value = filter
     }
 
     fun onCategoryFilterChanged(category: ExpenseCategory?) {
@@ -116,7 +203,7 @@ class ReceiptViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Analisi scontrino da immagine (fotocamera o galleria)
+     * Analisi scontrino da immagine (fotocamera o galleria) con Gemini AI
      */
     fun analyzeReceipt(bitmap: Bitmap, imageUri: Uri? = null) {
         viewModelScope.launch {
@@ -153,117 +240,213 @@ class ReceiptViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Conferma e salvataggio spesa nel database Room + eventuale sincronizzazione Sheets
+     * Aggiunge una transazione (Spesa o Entrata) e aggiorna automaticamente il saldo del conto
      */
-    fun saveExpense(
-        merchant: String,
+    fun addTransaction(
+        type: TransactionType,
+        title: String,
         amount: Double,
-        currency: String,
+        currency: String = "€",
         category: ExpenseCategory,
         date: Long,
-        notes: String,
-        imageUri: String?,
-        syncToSheets: Boolean
+        accountId: Long,
+        notes: String = "",
+        imageUri: String? = null
     ) {
         viewModelScope.launch {
             try {
-                val entity = ExpenseEntity(
-                    merchant = merchant.ifBlank { "Spesa" },
+                val entity = TransactionEntity(
+                    type = type.name,
+                    title = title.ifBlank { if (type == TransactionType.INCOME) "Entrata" else "Spesa" },
                     amount = amount,
-                    currency = currency.ifBlank { "€" },
+                    currency = currency,
                     category = category.name,
                     date = date,
+                    accountId = accountId,
                     notes = notes,
-                    imageUri = imageUri,
-                    isSyncedToSheets = false
+                    imageUri = imageUri
                 )
-
-                val newId = repository.insertExpense(entity)
-                val savedEntity = entity.copy(id = newId)
+                repository.addTransaction(entity)
                 _scanState.value = ScanUiState.Idle
-
-                if (syncToSheets) {
-                    syncExpenseInternal(savedEntity)
-                } else {
-                    _userFeedback.value = "Spesa salvata in locale (€${String.format("%.2f", amount)})"
-                }
+                val symbol = if (type == TransactionType.INCOME) "+€" else "-€"
+                _userFeedback.value = "${type.labelItalian} registrata: $symbol${String.format("%.2f", amount)}"
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to save expense", e)
-                _userFeedback.value = "Errore nel salvataggio: ${e.localizedMessage}"
+                Log.e(TAG, "Failed to save transaction", e)
+                _userFeedback.value = "Errore durante il salvataggio: ${e.localizedMessage}"
             }
         }
     }
 
-    fun syncExpense(expense: ExpenseEntity) {
+    fun deleteTransaction(transaction: TransactionEntity) {
         viewModelScope.launch {
-            syncExpenseInternal(expense)
+            repository.deleteTransaction(transaction)
+            _userFeedback.value = "Transazione eliminata e saldo conto ripristinato."
         }
     }
 
-    private suspend fun syncExpenseInternal(expense: ExpenseEntity) {
-        _isSyncing.value = true
-        val syncResult = sheetsSyncService.syncExpense(expense)
-        syncResult.fold(
-            onSuccess = { msg ->
-                repository.markAsSynced(expense.id)
-                _userFeedback.value = "✓ $msg"
-            },
-            onFailure = { err ->
-                _userFeedback.value = "Salvataggio locale completato. Sheets: ${err.localizedMessage}"
-            }
-        )
-        _isSyncing.value = false
-    }
-
-    fun syncAllUnsynced() {
+    /**
+     * Gestione Conti
+     */
+    fun addAccount(name: String, initialBalance: Double, colorHex: Long, iconType: String) {
         viewModelScope.launch {
-            _isSyncing.value = true
-            val unsynced = repository.getUnsyncedExpenses()
-            if (unsynced.isEmpty()) {
-                _userFeedback.value = "Tutte le spese sono già sincronizzate."
-                _isSyncing.value = false
-                return@launch
-            }
-
-            var successCount = 0
-            for (item in unsynced) {
-                val res = sheetsSyncService.syncExpense(item)
-                if (res.isSuccess) {
-                    repository.markAsSynced(item.id)
-                    successCount++
-                }
-            }
-            _userFeedback.value = "Sincronizzate $successCount su ${unsynced.size} spese su Google Sheets."
-            _isSyncing.value = false
-        }
-    }
-
-    fun deleteExpense(expense: ExpenseEntity) {
-        viewModelScope.launch {
-            repository.deleteExpense(expense)
-            _userFeedback.value = "Spesa eliminata."
-        }
-    }
-
-    fun exportToCsv(onIntentReady: (Intent) -> Unit) {
-        viewModelScope.launch {
-            val list = allExpenses.value
-            if (list.isEmpty()) {
-                _userFeedback.value = "Nessuna spesa da esportare."
-                return@launch
-            }
-            val result = sheetsSyncService.exportToCsvAndShare(list)
-            result.fold(
-                onSuccess = { intent -> onIntentReady(intent) },
-                onFailure = { err -> _userFeedback.value = err.localizedMessage }
+            val account = AccountEntity(
+                name = name.ifBlank { "Nuovo Conto" },
+                balance = initialBalance,
+                initialBalance = initialBalance,
+                colorHex = colorHex,
+                iconType = iconType
             )
+            repository.insertAccount(account)
+            _userFeedback.value = "Conto '$name' aggiunto con saldo €${String.format("%.2f", initialBalance)}!"
         }
     }
 
-    fun saveSheetSettings(sheetId: String, webhookUrl: String, sheetName: String) {
-        sheetsSyncService.sheetId = sheetId
-        sheetsSyncService.webhookUrl = webhookUrl
-        sheetsSyncService.sheetName = sheetName
-        _userFeedback.value = "Impostazioni Google Sheets salvate!"
+    fun deleteAccount(account: AccountEntity) {
+        viewModelScope.launch {
+            repository.deleteAccount(account)
+            _userFeedback.value = "Conto '${account.name}' eliminato."
+        }
+    }
+
+    /**
+     * Gestione Abbonamenti
+     */
+    fun addSubscription(
+        name: String,
+        cost: Double,
+        billingCycle: String,
+        nextRenewalDate: Long,
+        category: String,
+        colorHex: Long,
+        accountId: Long
+    ) {
+        viewModelScope.launch {
+            val sub = SubscriptionEntity(
+                name = name.ifBlank { "Abbonamento" },
+                cost = cost,
+                billingCycle = billingCycle,
+                nextRenewalDate = nextRenewalDate,
+                category = category,
+                colorHex = colorHex,
+                accountId = accountId,
+                isActive = true
+            )
+            repository.addSubscription(sub)
+            _userFeedback.value = "Abbonamento '$name' (€${String.format("%.2f", cost)}/$billingCycle) aggiunto!"
+        }
+    }
+
+    fun toggleSubscriptionActive(subscription: SubscriptionEntity) {
+        viewModelScope.launch {
+            val updated = subscription.copy(isActive = !subscription.isActive)
+            repository.updateSubscription(updated)
+            _userFeedback.value = if (updated.isActive) "Abbonamento riattivato" else "Abbonamento messo in pausa"
+        }
+    }
+
+    fun deleteSubscription(subscription: SubscriptionEntity) {
+        viewModelScope.launch {
+            repository.deleteSubscription(subscription)
+            _userFeedback.value = "Abbonamento rimosso."
+        }
+    }
+
+    /**
+     * Gestione Transazioni Fisse (Entrate e Uscite Fisse)
+     */
+    fun addRecurring(
+        type: String, // EXPENSE or INCOME
+        title: String,
+        amount: Double,
+        frequency: String,
+        dayOfMonth: Int,
+        category: ExpenseCategory,
+        colorHex: Long,
+        accountId: Long,
+        notes: String = ""
+    ) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val recurring = RecurringTransactionEntity(
+                type = type,
+                title = title.ifBlank { if (type == "INCOME") "Entrata Fissa" else "Uscita Fissa" },
+                amount = amount,
+                currency = "€",
+                frequency = frequency,
+                dayOfMonth = dayOfMonth,
+                nextDate = now + (dayOfMonth.coerceIn(1, 30) * 86_400_000L),
+                category = category.name,
+                colorHex = colorHex,
+                accountId = accountId,
+                isActive = true,
+                notes = notes
+            )
+            repository.addRecurring(recurring)
+            val typeLabel = if (type == "INCOME") "Entrata fissa" else "Spesa fissa"
+            _userFeedback.value = "$typeLabel '$title' (€${String.format("%.2f", amount)}) aggiunta!"
+        }
+    }
+
+    fun toggleRecurringActive(recurring: RecurringTransactionEntity) {
+        viewModelScope.launch {
+            val updated = recurring.copy(isActive = !recurring.isActive)
+            repository.updateRecurring(updated)
+            _userFeedback.value = if (updated.isActive) "Transazione fissa riattivata" else "Transazione fissa disattivata"
+        }
+    }
+
+    fun deleteRecurring(recurring: RecurringTransactionEntity) {
+        viewModelScope.launch {
+            repository.deleteRecurring(recurring)
+            _userFeedback.value = "Transazione fissa eliminata."
+        }
+    }
+
+    fun applyRecurringNow(recurring: RecurringTransactionEntity) {
+        viewModelScope.launch {
+            repository.applyRecurringNow(recurring)
+            val symbol = if (recurring.type == "INCOME") "+€" else "-€"
+            _userFeedback.value = "✓ Registrato nel conto: '${recurring.title}' ($symbol${String.format("%.2f", recurring.amount)})"
+        }
+    }
+
+    /**
+     * Gestione Limite di Spesa Mensile (Budget)
+     */
+    fun setMonthlyBudget(limit: Double) {
+        viewModelScope.launch {
+            if (limit <= 0) {
+                repository.clearMonthlyBudget()
+                _userFeedback.value = "Limite di spesa mensile rimosso."
+            } else {
+                repository.setMonthlyBudget(limit)
+                _userFeedback.value = "Budget mensile impostato a €${String.format(java.util.Locale.ITALIAN, "%.2f", limit)}!"
+            }
+        }
+    }
+
+    fun clearMonthlyBudget() {
+        viewModelScope.launch {
+            repository.clearMonthlyBudget()
+            _userFeedback.value = "Limite di spesa mensile disattivato."
+        }
+    }
+
+    /**
+     * Gestione Personalizzazione Tema & Colori
+     */
+    fun setColorTheme(theme: AppColorTheme) {
+        themePreferences.setColorTheme(theme)
+        _userFeedback.value = "Colore tema: ${theme.labelItalian} (${theme.hexDescription})"
+    }
+
+    fun setBackgroundTheme(bgTheme: AppBackgroundTheme) {
+        themePreferences.setBackgroundTheme(bgTheme)
+        _userFeedback.value = "Sfondo aggiornato: ${bgTheme.labelItalian}"
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        themePreferences.setThemeMode(mode)
+        _userFeedback.value = "Modalità display: ${mode.labelItalian}"
     }
 }
